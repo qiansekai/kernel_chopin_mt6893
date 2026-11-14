@@ -188,6 +188,11 @@ static __nocfi ssize_t ksu_sel_write_access(struct file *file, const char __user
 	if (ksu_copy_from_user_retry(kbuf, buf, len))
 		goto skip_destroy;
 
+	// control-group probes from standard AOSP contexts: never hide these
+	if (strstr(kbuf, "u:r:system_server:s0 u:r:system_server:s0") ||
+	    strstr(kbuf, "u:r:dex2oat:s0 u:object_r:dex2oat_exec:s0"))
+		goto skip_destroy;
+
 	if (!ksu_should_destroy_context(kbuf))
 		goto skip_destroy;
 
