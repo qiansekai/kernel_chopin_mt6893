@@ -192,7 +192,7 @@ static __nocfi ssize_t ksu_sel_write_access(struct file *file, const char __user
 		goto skip_destroy;
 
 	pr_info("selinux_hide: sel_write_access: destroy: %s\n", kbuf);
-	return -EINVAL;
+	return -EACCES;
 
 skip_destroy:
 	return sel_write_access_fn(file, buf, size, pos);
