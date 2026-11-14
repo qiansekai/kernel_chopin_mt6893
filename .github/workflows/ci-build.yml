@@ -39,13 +39,20 @@ jobs:
           cp -r /tmp/sukisu/uapi drivers/kernelsu/uapi 2>/dev/null || true
           ls drivers/kernelsu
           grep -E '^config KSU$' drivers/kernelsu/Kconfig || true
-          # 4.14 compat: syscall_fn_t (introduced in 5.x)
-          if ! grep -q 'typedef void (\*syscall_fn_t)' drivers/kernelsu/kernel_compat.h 2>/dev/null; then
-            printf '\n#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 0, 0)\ntypedef void (*syscall_fn_t)(void);\n#endif\n' >> drivers/kernelsu/kernel_compat.h
-          fi
-          if ! grep -q 'kernel_compat.h' drivers/kernelsu/hook/syscall_hook.h; then
-            sed -i '1i #include "../kernel_compat.h"' drivers/kernelsu/hook/syscall_hook.h
-          fi
+          # 4.14 compat patches
+          python3 - <<'PY'
+          p='drivers/kernelsu/hook/syscall_hook.h'
+          s=open(p).read()
+          if 'typedef void (*syscall_fn_t)' not in s:
+              s='#include <linux/version.h>\n#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 0, 0)\ntypedef void (*syscall_fn_t)(void);\n#endif\n'+s
+              open(p,'w').write(s)
+          p='drivers/kernelsu/kernel_compat.h'
+          s=open(p).read()
+          if 'copy_from_user_nofault' not in s:
+              s+='\n#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 8, 0)\n#define copy_from_user_nofault(dst, src, size) probe_kernel_read(dst, (void __user *)(src), size)\n#endif\n'
+              open(p,'w').write(s)
+          print('compat patched')
+          PY
 
       - name: Set kernel identity to stock
         run: |
