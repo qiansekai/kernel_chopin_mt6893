@@ -31,6 +31,15 @@ jobs:
           curl -sSL "https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/tags/android-12.1.0_r27/clang-r383902.tar.gz" | tar -xz -C "$PWD/clang"
           "$PWD/clang/bin/clang" --version
 
+      - name: Swap KernelSU with SukiSU kernel
+        run: |
+          git clone --depth 1 https://github.com/SukiSU-Ultra/SukiSU-Ultra /tmp/sukisu
+          rm -rf drivers/kernelsu
+          cp -r /tmp/sukisu/kernel drivers/kernelsu
+          cp -r /tmp/sukisu/uapi drivers/kernelsu/uapi 2>/dev/null || true
+          ls drivers/kernelsu
+          grep -E '^config KSU$' drivers/kernelsu/Kconfig || true
+
       - name: Set kernel identity to stock
         run: |
           sed -i 's/^SUBLEVEL = 357/SUBLEVEL = 186/' Makefile
