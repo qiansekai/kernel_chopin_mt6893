@@ -28,7 +28,7 @@ jobs:
       - name: Fetch clang r383902
         run: |
           mkdir -p "$PWD/clang"
-          curl -sSL "https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/main/clang-r383902.tar.gz" | tar -xz -C "$PWD/clang"
+          curl -sSL "https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/tags/android-12.1.0_r27/clang-r383902.tar.gz" | tar -xz -C "$PWD/clang"
           "$PWD/clang/bin/clang" --version
 
       - name: Build kernel
