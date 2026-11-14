@@ -269,6 +269,36 @@ skip_destroy:
 	return selinux_transaction_write_fn(file, buf, size, pos);
 }
 
+
+// selinux access write hijack
+static ssize_t (*sel_write_access_fn)(struct file *file, const char __user *buf, size_t size, loff_t *pos) __read_mostly = NULL;
+static __nocfi ssize_t ksu_sel_write_access(struct file *file, const char __user *buf, size_t size, loff_t *pos)
+{
+	if (unlikely(!ksu_selinux_hide_enabled))
+		goto skip_destroy;
+
+	if (!test_thread_flag(TIF_SECCOMP))
+		goto skip_destroy;
+
+	if (current_uid().val < 10000)
+		goto skip_destroy;
+
+	char kbuf[256] = { 0 };
+	size_t len = (size < 255) ? size : 255;
+
+	if (ksu_copy_from_user_retry(kbuf, buf, len))
+		goto skip_destroy;
+
+	if (!ksu_should_destroy_context(kbuf))
+		goto skip_destroy;
+
+	pr_info("selinux_hide: sel_write_access: destroy: %s\n", kbuf);
+	return -EINVAL;
+
+skip_destroy:
+	return sel_write_access_fn(file, buf, size, pos);
+}
+
 #if LINUX_VERSION_CODE < KERNEL_VERSION(6, 4, 0) && defined(KSU_COMPAT_HAS_SELINUX_STATE)
 extern struct selinux_state selinux_state;
 #define ksu_selinux_kernel_status_page() selinux_kernel_status_page(&selinux_state)
@@ -397,6 +427,67 @@ bail_out:
 	path_put(&path);
 }
 
+
+static void ksu_init_hook_selinux_access_write()
+{
+	struct path path;
+	const char *selinux_access = "/sys/fs/selinux/access";
+
+	int error = kern_path(selinux_access, LOOKUP_FOLLOW, &path);
+	if (error) {
+		pr_info("selinux_hide: kern_path err: %d\n", error);
+		return;
+	}
+
+	pr_info("selinux_hide: kern_path %s ok!\n", selinux_access);
+
+	if (!path.dentry)
+		goto bail_out;
+
+	if (!d_inode(path.dentry))
+		goto bail_out;
+
+	struct file_operations *fops = (struct file_operations *)d_inode(path.dentry)->i_fop;
+	if (!fops)
+		goto bail_out;
+
+	if (!fops->write)
+		goto bail_out;
+
+	pr_info("selinux_hide: found access_ops->write at 0x%lx\n", (uintptr_t)fops->write);
+	sel_write_access_fn = fops->write;
+
+	unsigned long addr = (unsigned long)&fops->write;
+	unsigned long base = addr & PAGE_MASK;
+	unsigned long offset = addr & ~PAGE_MASK;
+
+	struct page *page = phys_to_page(__pa(base));
+	if (!page)
+		goto bail_out;
+
+	void *writable_addr = vmap(&page, 1, VM_MAP, PAGE_KERNEL);
+	if (!writable_addr)
+		goto bail_out;
+
+	void **target_slot = (void **)((unsigned long)writable_addr + offset);
+
+	preempt_disable();
+	local_irq_disable();
+
+	WRITE_ONCE(*target_slot, ksu_sel_write_access);
+
+	local_irq_enable();
+	preempt_enable();
+
+	vunmap(writable_addr);
+	smp_mb();
+
+	pr_info("selinux_hide: access_ops->write hijacked!\n");
+
+bail_out:
+	path_put(&path);
+}
+
 static void ksu_init_hook_selinux_status_open()
 {
 	struct path path;
@@ -490,6 +581,7 @@ init_hooks:
 
 	ksu_selinux_hide_enable();
 	ksu_init_hook_selinux_transaction_write();
+	ksu_init_hook_selinux_access_write();
 
 	int tries = 0;
 try_again:
@@ -554,4 +646,5 @@ void __exit ksu_selinux_hide_exit()
 {
 	ksu_unregister_feature_handler(KSU_FEATURE_SELINUX_HIDE);
 }
+
 
