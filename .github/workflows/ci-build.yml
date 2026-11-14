@@ -6,7 +6,7 @@ on:
     branches: [inc_ksu]
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -31,7 +31,23 @@ jobs:
           curl -sSL "https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/tags/android-12.1.0_r27/clang-r383902.tar.gz" | tar -xz -C "$PWD/clang"
           "$PWD/clang/bin/clang" --version
 
+      - name: Set kernel identity to stock
+        run: |
+          sed -i 's/^SUBLEVEL = 357/SUBLEVEL = 186/' Makefile
+          sed -i 's/^EXTRAVERSION =.*/EXTRAVERSION =/' Makefile
+          if grep -q '^CONFIG_LOCALVERSION=' arch/arm64/configs/chopin_defconfig; then
+            sed -i 's|^CONFIG_LOCALVERSION=.*|CONFIG_LOCALVERSION="-gaa24d707761c"|' arch/arm64/configs/chopin_defconfig
+          else
+            echo 'CONFIG_LOCALVERSION="-gaa24d707761c"' >> arch/arm64/configs/chopin_defconfig
+          fi
+          grep -E '^VERSION|^PATCHLEVEL|^SUBLEVEL|^EXTRAVERSION' Makefile
+          grep LOCALVERSION arch/arm64/configs/chopin_defconfig
+
       - name: Build kernel
+        env:
+          KBUILD_BUILD_USER: builder
+          KBUILD_BUILD_HOST: pangu-build-component-vendor-176809-mjwkw-h4m64-542cj
+          KBUILD_BUILD_TIMESTAMP: "Thu Nov  2 16:13:34 UTC 2023"
         run: |
           export ARCH=arm64
           export LC_ALL=C
@@ -67,3 +83,17 @@ jobs:
             out/arch/arm64/boot/Image.gz
             out/arch/arm64/boot/Image.gz-dtb
           if-no-files-found: warn
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: chopin-kernel-${{ github.run_number }}
+          body: |
+            Kernel: 4.14.186-gaa24d707761c (stock identity, inc_ksu + selinux_hide)
+            Commit: ${{ github.sha }}
+            Run: ${{ github.run_number }}
+          files: |
+            out/arch/arm64/boot/Image.gz-dtb
+            out/arch/arm64/boot/Image.gz
+          fail_on_unmatched_files: false
