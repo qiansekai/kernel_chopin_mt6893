@@ -39,6 +39,13 @@ jobs:
           cp -r /tmp/sukisu/uapi drivers/kernelsu/uapi 2>/dev/null || true
           ls drivers/kernelsu
           grep -E '^config KSU$' drivers/kernelsu/Kconfig || true
+          # 4.14 compat: syscall_fn_t (introduced in 5.x)
+          if ! grep -q 'typedef void (\*syscall_fn_t)' drivers/kernelsu/kernel_compat.h 2>/dev/null; then
+            printf '\n#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 0, 0)\ntypedef void (*syscall_fn_t)(void);\n#endif\n' >> drivers/kernelsu/kernel_compat.h
+          fi
+          if ! grep -q 'kernel_compat.h' drivers/kernelsu/hook/syscall_hook.h; then
+            sed -i '1i #include "../kernel_compat.h"' drivers/kernelsu/hook/syscall_hook.h
+          fi
 
       - name: Set kernel identity to stock
         run: |
