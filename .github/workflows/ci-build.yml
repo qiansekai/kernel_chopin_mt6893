@@ -22,7 +22,8 @@ jobs:
       - name: Install build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y bc bison flex libssl-dev libelf-dev device-tree-compiler cpio rsync
+          sudo apt-get install -y bc bison build-essential flex libssl-dev libelf-dev \
+            device-tree-compiler cpio rsync gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi
 
       - name: Fetch clang r383902
         run: |
@@ -34,14 +35,17 @@ jobs:
         run: |
           export ARCH=arm64
           export LC_ALL=C
+          export PATH="$PWD/clang/bin:$PATH"
           mkdir -p out
           make O=out ARCH=arm64 chopin_defconfig
-          PATH="$PWD/clang/bin:$PATH" make -j"$(nproc)" O=out \
+          make -j"$(nproc)" O=out \
             ARCH=arm64 \
             CC=clang \
+            HOSTCC=gcc \
+            HOSTLD=ld \
             CLANG_TRIPLE=aarch64-linux-gnu- \
-            CROSS_COMPILE="$PWD/clang/bin/aarch64-linux-gnu-" \
-            CROSS_COMPILE_ARM32="$PWD/clang/bin/arm-linux-gnueabi-" \
+            CROSS_COMPILE=aarch64-linux-gnu- \
+            CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
             LD=ld.lld \
             STRIP=llvm-strip \
             AS=llvm-as \
