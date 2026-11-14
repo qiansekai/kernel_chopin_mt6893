@@ -53,6 +53,7 @@ jobs:
               open(p,'w').write(s)
           print('compat patched')
           PY
+          sed -i '/MODULE_IMPORT_NS/d' drivers/kernelsu/core/init.c
 
       - name: Set kernel identity to stock
         run: |
